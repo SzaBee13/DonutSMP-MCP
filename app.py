@@ -119,12 +119,13 @@ def get_mcp_tools() -> list[dict[str, Any]]:
         },
         {
             "name": "auction_search",
-            "description": "Search Auction House by item name (e.g., 'Diamond', 'Netherite')",
+            "description": "Search Auction House by item name (e.g., 'Diamond', 'Netherite'). Searches up to 20 pages by default for comprehensive results.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Item name to search for"},
-                    "page": {"type": "number", "default": 1},
+                    "query": {"type": "string", "description": "Item name to search for (e.g., 'netherite', 'diamond_sword')"},
+                    "page": {"type": "number", "default": 1, "description": "Starting page (usually 1)"},
+                    "max_pages": {"type": "number", "default": 20, "description": "Number of pages to search (increase for more results)"},
                 },
                 "required": ["query"],
             },
@@ -205,46 +206,55 @@ def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any
             query = arguments.get("query", "").strip()
             if not query:
                 return {"error": "query parameter required"}
-            page = arguments.get("page", 1)
-            # Search for items matching the query across all auctions
-            all_auctions_resp = make_request(f"/auction/list/{page}")
-            if "error" in all_auctions_resp:
-                return all_auctions_resp
+            start_page = arguments.get("page", 1)
+            max_pages = arguments.get("max_pages", 20)  # Search up to 20 pages by default for comprehensive results
             
-            # Handle different response formats from DonutSMP API
-            if "result" in all_auctions_resp:
-                all_auctions = all_auctions_resp.get("result", [])
-            elif isinstance(all_auctions_resp, dict) and "auctions" in all_auctions_resp:
-                all_auctions = all_auctions_resp.get("auctions", [])
-            elif isinstance(all_auctions_resp, list):
-                all_auctions = all_auctions_resp
-            else:
-                all_auctions = []
-            
-            # Filter auctions by searching in item.id, item.display_name, item.lore
+            # Search for items matching the query across multiple pages
             query_lower = query.lower()
-            filtered = []
-            for auction in all_auctions:
-                if isinstance(auction, dict):
-                    item = auction.get("item", {})
-                    if isinstance(item, dict):
-                        # Check item ID (e.g., "minecraft:diamond")
-                        item_id = (item.get("id") or "").lower()
-                        # Check custom display name
-                        display_name = (item.get("display_name") or "").lower()
-                        # Check lore text
-                        lore = (item.get("lore") or "").lower()
-                        
-                        if query_lower in item_id or query_lower in display_name or query_lower in lore:
-                            filtered.append(auction)
-                    elif isinstance(item, str) and query_lower in item.lower():
-                        filtered.append(auction)
+            all_filtered = []
+            
+            for page_num in range(start_page, start_page + max_pages):
+                page_resp = make_request(f"/auction/list/{page_num}")
+                if "error" in page_resp:
+                    break  # Stop if we hit an error (invalid page, etc.)
+                
+                # Handle different response formats from DonutSMP API
+                if "result" in page_resp:
+                    auctions = page_resp.get("result", [])
+                elif isinstance(page_resp, dict) and "auctions" in page_resp:
+                    auctions = page_resp.get("auctions", [])
+                elif isinstance(page_resp, list):
+                    auctions = page_resp
+                else:
+                    auctions = []
+                
+                # Filter auctions on this page
+                for auction in auctions:
+                    if isinstance(auction, dict):
+                        item = auction.get("item", {})
+                        if isinstance(item, dict):
+                            # Check item ID (e.g., "minecraft:diamond")
+                            item_id = (item.get("id") or "").lower()
+                            # Check custom display name
+                            display_name = (item.get("display_name") or "").lower()
+                            # Check lore text
+                            lore = (item.get("lore") or "").lower()
+                            
+                            if query_lower in item_id or query_lower in display_name or query_lower in lore:
+                                all_filtered.append(auction)
+                        elif isinstance(item, str) and query_lower in item.lower():
+                            all_filtered.append(auction)
+                
+                # Stop if this page had no results (empty page = no more pages)
+                if not auctions:
+                    break
             
             return {
                 "query": query,
-                "page": page,
-                "total_found": len(filtered),
-                "auctions": filtered[:20],  # Return top 20 matches
+                "start_page": start_page,
+                "pages_searched": min(max_pages, (start_page - 1) + len([p for p in range(start_page, start_page + max_pages)])),
+                "total_found": len(all_filtered),
+                "auctions": all_filtered[:30],  # Return top 30 matches across all pages
             }
         if tool_name == "leaderboards":
             return make_request(f"/leaderboards/{arguments.get('type', 'money')}/{arguments.get('page', 1)}")
