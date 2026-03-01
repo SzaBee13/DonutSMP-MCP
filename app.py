@@ -118,6 +118,18 @@ def get_mcp_tools() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "auction_search",
+            "description": "Search Auction House by item name (e.g., 'Diamond', 'Netherite')",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Item name to search for"},
+                    "page": {"type": "number", "default": 1},
+                },
+                "required": ["query"],
+            },
+        },
+        {
             "name": "leaderboards",
             "description": "Get leaderboard data. Types: brokenblocks, deaths, kills, mobskilled, money, placedblocks, playtime, sell, shards, shop",
             "inputSchema": {
@@ -189,6 +201,51 @@ def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any
             return make_request(f"/auction/list/{arguments.get('page', 1)}")
         if tool_name == "auction_transactions":
             return make_request(f"/auction/transactions/{arguments.get('page', 1)}")
+        if tool_name == "auction_search":
+            query = arguments.get("query", "").strip()
+            if not query:
+                return {"error": "query parameter required"}
+            page = arguments.get("page", 1)
+            # Search for items matching the query across all auctions
+            all_auctions_resp = make_request(f"/auction/list/{page}")
+            if "error" in all_auctions_resp:
+                return all_auctions_resp
+            
+            # Handle different response formats from DonutSMP API
+            if "result" in all_auctions_resp:
+                all_auctions = all_auctions_resp.get("result", [])
+            elif isinstance(all_auctions_resp, dict) and "auctions" in all_auctions_resp:
+                all_auctions = all_auctions_resp.get("auctions", [])
+            elif isinstance(all_auctions_resp, list):
+                all_auctions = all_auctions_resp
+            else:
+                all_auctions = []
+            
+            # Filter auctions by searching in item.id, item.display_name, item.lore
+            query_lower = query.lower()
+            filtered = []
+            for auction in all_auctions:
+                if isinstance(auction, dict):
+                    item = auction.get("item", {})
+                    if isinstance(item, dict):
+                        # Check item ID (e.g., "minecraft:diamond")
+                        item_id = (item.get("id") or "").lower()
+                        # Check custom display name
+                        display_name = (item.get("display_name") or "").lower()
+                        # Check lore text
+                        lore = (item.get("lore") or "").lower()
+                        
+                        if query_lower in item_id or query_lower in display_name or query_lower in lore:
+                            filtered.append(auction)
+                    elif isinstance(item, str) and query_lower in item.lower():
+                        filtered.append(auction)
+            
+            return {
+                "query": query,
+                "page": page,
+                "total_found": len(filtered),
+                "auctions": filtered[:20],  # Return top 20 matches
+            }
         if tool_name == "leaderboards":
             return make_request(f"/leaderboards/{arguments.get('type', 'money')}/{arguments.get('page', 1)}")
         if tool_name == "lookup_player":
@@ -386,6 +443,14 @@ def http_tools():
 @bridge.get("/auction/list/<int:page>")
 def http_auction_list(page: int):
     return jsonify(make_request(f"/auction/list/{page}"))
+
+
+@bridge.get("/auction/search/<query>")
+@bridge.get("/auction/search/<query>/<int:page>")
+def http_auction_search(query: str, page: int = 1):
+    """Search auctions by item name."""
+    result = execute_mcp_tool("auction_search", {"query": query, "page": page})
+    return jsonify(result)
 
 
 @bridge.get("/auction/transactions/<int:page>")
