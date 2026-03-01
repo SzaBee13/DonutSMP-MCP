@@ -171,70 +171,82 @@ def http_mcp_endpoint():
         )
 
     body = request.get_json(force=True, silent=True)
-    if not isinstance(body, dict):
-        return jsonify({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}})
 
-    req_id = body.get("id")
-    if body.get("jsonrpc") != "2.0" or not isinstance(body.get("method"), str):
-        return jsonify({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32600, "message": "Invalid Request"}})
+    def mcp_result(req_id: Any, result: dict[str, Any]) -> dict[str, Any]:
+        return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
-    method = body.get("method")
-    params = body.get("params", {})
-    if not isinstance(params, dict):
-        params = {}
+    def mcp_error(req_id: Any, code: int, message: str) -> dict[str, Any]:
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
-    if method == "initialize":
-        client_version = params.get("protocolVersion")
-        return jsonify(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {
+    def handle_mcp_message(message: Any) -> dict[str, Any] | None:
+        if not isinstance(message, dict):
+            return mcp_error(None, -32600, "Invalid Request")
+
+        req_id = message.get("id")
+        method = message.get("method")
+
+        if message.get("jsonrpc") != "2.0" or not isinstance(method, str):
+            return mcp_error(req_id, -32600, "Invalid Request")
+
+        params = message.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
+
+        if method.startswith("notifications/"):
+            return None
+
+        if method == "ping":
+            return mcp_result(req_id, {})
+
+        if method == "initialize":
+            client_version = params.get("protocolVersion")
+            return mcp_result(
+                req_id,
+                {
                     "protocolVersion": client_version or "2025-03-26",
-                    "capabilities": {"tools": {}},
+                    "capabilities": {"tools": {"listChanged": False}},
                     "serverInfo": {"name": "DonutSMP", "version": "0.1.0"},
                 },
-            }
-        )
-
-    if method == "tools/list":
-        return jsonify({"jsonrpc": "2.0", "id": req_id, "result": {"tools": get_mcp_tools()}})
-
-    if method == "tools/call":
-        tool_name = params.get("name")
-        arguments = params.get("arguments", {})
-        if not isinstance(arguments, dict):
-            arguments = {}
-        valid_tools = {
-            "auction_list",
-            "auction_transactions",
-            "leaderboards",
-            "lookup_player",
-            "player_stats",
-            "shield_metrics",
-            "shield_stats",
-        }
-        if tool_name not in valid_tools:
-            return jsonify(
-                {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -32601, "message": f"Tool not found: {tool_name}"},
-                }
             )
 
-        result = execute_mcp_tool(tool_name, arguments)
-        return jsonify(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]},
-            }
-        )
+        if method == "tools/list":
+            return mcp_result(req_id, {"tools": get_mcp_tools()})
 
-    return jsonify(
-        {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Unknown method: {method}"}}
-    )
+        if method == "tools/call":
+            tool_name = params.get("name")
+            arguments = params.get("arguments", {})
+            if not isinstance(arguments, dict):
+                arguments = {}
+
+            valid_tools = {
+                "auction_list",
+                "auction_transactions",
+                "leaderboards",
+                "lookup_player",
+                "player_stats",
+                "shield_metrics",
+                "shield_stats",
+            }
+            if tool_name not in valid_tools:
+                return mcp_error(req_id, -32601, f"Tool not found: {tool_name}")
+
+            result = execute_mcp_tool(tool_name, arguments)
+            return mcp_result(req_id, {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]})
+
+        return mcp_error(req_id, -32601, f"Unknown method: {method}")
+
+    if isinstance(body, list):
+        if not body:
+            return jsonify(mcp_error(None, -32600, "Invalid Request"))
+        responses = [item for item in (handle_mcp_message(message) for message in body) if item is not None]
+        if not responses:
+            return ("", 204)
+        return jsonify(responses)
+
+    response = handle_mcp_message(body)
+    if response is None:
+        return ("", 204)
+    return jsonify(response)
 
 
 @app.get("/sse")
