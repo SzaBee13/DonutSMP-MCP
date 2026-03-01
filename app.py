@@ -58,12 +58,26 @@ def make_request(endpoint: str, method: str = "GET", data: dict | None = None) -
 
 @app.before_request
 def log_requests_and_handle_options():
+    """Log all requests for debugging ChatGPT connector creation issues.
+    
+    ChatGPT sends discovery probes to various endpoints (/, /mcp, /tools, /.well-known/mcp.json)
+    and this logging helps diagnose silent failures during connector setup.
+    """
     body_preview = ""
     if request.method in {"POST", "PUT", "PATCH"}:
         raw = request.get_data(cache=True, as_text=True) or ""
         body_preview = raw[:500]
-    print(f"[REQ] {request.method} {request.path} query={request.query_string.decode()} body={body_preview}")
+    
+    # Log critical headers for debugging (User-Agent, Origin, Content-Type)
+    ua = request.headers.get('User-Agent', 'n/a')[:80]
+    origin = request.headers.get('Origin', 'n/a')
+    ct = request.headers.get('Content-Type', 'n/a')
+    print(f"[REQ] {request.method} {request.path} query={request.query_string.decode()}")
+    print(f"      UA={ua} Origin={origin} CT={ct}")
+    if body_preview:
+        print(f"      body={body_preview}")
 
+    # Handle CORS preflight requests (ChatGPT browser-based discovery)
     if request.method == "OPTIONS":
         return ("", 204)
     return None
@@ -71,9 +85,16 @@ def log_requests_and_handle_options():
 
 @app.after_request
 def add_cors_headers(response):
+    """Full CORS support for ChatGPT connector (browser-based clients).
+    
+    ChatGPT's custom connector UI makes cross-origin requests to discover tools.
+    Without these headers, browser preflight (OPTIONS) requests will fail silently.
+    """
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Expose-Headers"] = "*"
+    response.headers["Access-Control-Max-Age"] = "86400"  # Cache preflight for 24h
     return response
 
 
@@ -283,6 +304,11 @@ def get_server_metadata(base_path: str) -> dict[str, Any]:
 # ── Root + /mcp handshake endpoints ───────────────────────────────────────────
 @app.route("/", methods=["GET", "POST"])
 def mcp_root_base():
+    """Root endpoint: GET returns metadata, POST handles JSON-RPC MCP requests.
+    
+    ChatGPT may probe this endpoint directly or use /mcp prefix.
+    Dual-path support ensures compatibility with different client discovery patterns.
+    """
     if request.method == "POST":
         return handle_mcp_request()
     return jsonify(get_server_metadata(""))
@@ -290,9 +316,42 @@ def mcp_root_base():
 
 @app.route("/mcp", methods=["GET", "POST"])
 def mcp_root_prefixed():
+    """Prefixed MCP endpoint for clients that expect /mcp base path.
+    
+    Some MCP clients (including ChatGPT) may expect /mcp as the base path.
+    This mirrors the root endpoint behavior under the /mcp prefix.
+    """
     if request.method == "POST":
         return handle_mcp_request()
     return jsonify(get_server_metadata("/mcp"))
+
+
+@app.route("/.well-known/mcp.json", methods=["GET"])
+def well_known_mcp():
+    """OpenAI/ChatGPT MCP discovery endpoint (2026 pattern).
+    
+    ChatGPT custom connectors may probe /.well-known/mcp.json for discovery.
+    This returns minimal valid JSON describing the MCP server capabilities.
+    Even for no-auth servers, this helps ChatGPT discover available tools.
+    """
+    return jsonify({
+        "name": "DonutSMP MCP",
+        "description": "DonutSMP API bridge with MCP protocol support",
+        "version": "1.0",
+        "protocolVersion": MCP_PROTOCOL_VERSION,
+        "transport": {"type": "http"},
+        "capabilities": {
+            "tools": True,
+            "resources": False,
+            "prompts": False
+        },
+        "endpoints": {
+            "root": "/",
+            "mcp": "/mcp",
+            "tools": "/tools",
+            "health": "/health"
+        }
+    })
 
 
 # ── Shared API routes exposed under BOTH root and /mcp ───────────────────────
@@ -313,6 +372,12 @@ def http_health():
 
 @bridge.get("/tools")
 def http_tools():
+    """Return OpenAI-compatible tool list for ChatGPT connector discovery.
+    
+    ChatGPT probes /tools (or /mcp/tools) to discover available tools.
+    Each tool includes name, description, and parameters as JSON schema.
+    This format is compatible with both MCP clients and OpenAI's tool calling.
+    """
     payload = get_chatgpt_tools_payload()
     payload["server"] = {"name": "DonutSMP MCP Bridge", "version": "0.1.0"}
     return jsonify(payload)
