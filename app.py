@@ -211,6 +211,14 @@ def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any
             
             # Search for items matching the query across multiple pages
             query_lower = query.lower()
+            # Create variants of the query to match different naming conventions
+            # "item frame" -> ["item frame", "item_frame"]
+            query_variants = [
+                query_lower,
+                query_lower.replace(" ", "_"),  # Handle spaces vs underscores
+                query_lower.replace("_", " "),  # Handle underscores vs spaces
+            ]
+            
             all_filtered = []
             
             for page_num in range(start_page, start_page + max_pages):
@@ -233,16 +241,24 @@ def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any
                     if isinstance(auction, dict):
                         item = auction.get("item", {})
                         if isinstance(item, dict):
-                            # Check item ID (e.g., "minecraft:diamond")
+                            # Check item ID (e.g., "minecraft:diamond", "minecraft:item_frame")
                             item_id = (item.get("id") or "").lower()
                             # Check custom display name
                             display_name = (item.get("display_name") or "").lower()
                             # Check lore text
                             lore = (item.get("lore") or "").lower()
                             
-                            if query_lower in item_id or query_lower in display_name or query_lower in lore:
+                            # Match against any query variant
+                            matches = any(
+                                variant in item_id or 
+                                variant in display_name or 
+                                variant in lore
+                                for variant in query_variants
+                            )
+                            
+                            if matches:
                                 all_filtered.append(auction)
-                        elif isinstance(item, str) and query_lower in item.lower():
+                        elif isinstance(item, str) and any(variant in item.lower() for variant in query_variants):
                             all_filtered.append(auction)
                 
                 # Stop if this page had no results (empty page = no more pages)
