@@ -170,22 +170,28 @@ def http_mcp_endpoint():
             }
         )
 
-    body = request.get_json(silent=True) or {}
-    if "method" not in body:
-        return jsonify({"error": "Invalid MCP request"}), 400
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}})
+
+    req_id = body.get("id")
+    if body.get("jsonrpc") != "2.0" or not isinstance(body.get("method"), str):
+        return jsonify({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32600, "message": "Invalid Request"}})
 
     method = body.get("method")
     params = body.get("params", {})
-    req_id = body.get("id")
+    if not isinstance(params, dict):
+        params = {}
 
     if method == "initialize":
+        client_version = params.get("protocolVersion")
         return jsonify(
             {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"resources": {}, "tools": {"listChanged": True}},
+                    "protocolVersion": client_version or "2025-03-26",
+                    "capabilities": {"tools": {}},
                     "serverInfo": {"name": "DonutSMP", "version": "0.1.0"},
                 },
             }
@@ -197,6 +203,8 @@ def http_mcp_endpoint():
     if method == "tools/call":
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
+        if not isinstance(arguments, dict):
+            arguments = {}
         valid_tools = {
             "auction_list",
             "auction_transactions",
