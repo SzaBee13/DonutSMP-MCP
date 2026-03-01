@@ -11,8 +11,5 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ],
-  "env": {
-    "DONUTSMP_API_KEY": "@donutsmp_api_key"
-  }
+  ]
 }
