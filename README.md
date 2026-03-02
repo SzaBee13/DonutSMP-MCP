@@ -185,4 +185,4 @@ Show me the current auction house listings on page 1
 
 ## License
 
-MIT
+This project is licensed under the GUN GPL.3 License. See [LICENSE](LICENSE.md) for details.

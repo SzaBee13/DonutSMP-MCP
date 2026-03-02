@@ -13,7 +13,7 @@ The `/mcp` endpoint implements the Model Context Protocol using JSON-RPC 2.0. Th
 #### Methods Available
 
 **Initialize Connection**
-```bash
+```
 POST /mcp
 Content-Type: application/json
 

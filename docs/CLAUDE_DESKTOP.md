@@ -1,83 +1,182 @@
-# Claude Desktop Integration
+# Claude Desktop Installation Guide
 
-## ✅ Configuration Added
+This guide provides step-by-step instructions for installing Claude Desktop on your computer.
 
-The DonutSMP MCP server is now configured in your Claude Desktop at:
+## Table of Contents
+
+- [System Requirements](#system-requirements)
+- [Installation Steps](#installation-steps)
+  - [Windows](#windows)
+  - [macOS](#macos)
+  - [Linux](#linux)
+- [Initial Setup](#initial-setup)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+
+## System Requirements
+
+### Minimum Requirements
+
+- **RAM**: 4 GB minimum (8 GB recommended)
+- **Storage**: 500 MB free disk space
+- **Internet**: Active internet connection required
+- **Display**: 1024x768 resolution minimum
+
+### Supported Operating Systems
+
+- Windows 10 or later (64-bit)
+- macOS 11 (Big Sur) or later
+- Linux (Ubuntu 18.04 or later, or equivalent)
+
+## Installation Steps
+
+### Windows
+
+1. **Download Claude Desktop**
+   - Visit [claude.ai](https://claude.ai)
+   - Click on the "Download Desktop" button
+   - Download the `.exe` installer for Windows
+
+2. **Run the Installer**
+   - Locate the downloaded `.exe` file (usually in Downloads folder)
+   - Double-click to launch the installer
+   - Accept the User Account Control (UAC) prompt if prompted
+
+3. **Follow Installation Wizard**
+   - Accept the license agreement
+   - Choose installation location (default is recommended)
+   - Select whether to create a Start Menu shortcut
+   - Click "Install" and wait for completion
+
+4. **Launch Claude Desktop**
+   - Click "Finish" when installation completes
+   - Claude Desktop will launch automatically
+   - Alternatively, find Claude in the Start Menu and click to open
+
+### macOS
+
+1. **Download Claude Desktop**
+   - Visit [claude.ai](https://claude.ai)
+   - Click on the "Download Desktop" button
+   - Download the `.dmg` file for macOS
+
+2. **Install from DMG**
+   - Locate the downloaded `.dmg` file in Downloads
+   - Double-click to mount the disk image
+   - Drag the Claude icon to the Applications folder
+   - Wait for the copy process to complete
+
+3. **Launch Claude Desktop**
+   - Open Applications folder
+   - Find and double-click "Claude" application
+   - Grant any necessary permissions when prompted
+   - Accept security permissions from macOS
+
+### Linux
+
+1. **Download Claude Desktop**
+   - Visit [claude.ai](https://claude.ai)
+   - Follow the instructions for Linux installation (usually involves downloading a `.deb` or `.AppImage` file)
+
+## Initial Setup
+
+1. **Sign In or Create Account**
+   - When Claude Desktop opens, you'll be prompted to sign in
+   - Use your Anthropic account credentials or create a new account
+   - If you don't have one, click "Sign Up" to create an account
+
+2. **Enable Notifications (Optional)**
+   - You may be prompted to enable desktop notifications
+   - Click "Allow" or "Skip" based on your preference
+
+3. **Configure Preferences**
+   - Click the settings icon (gear icon) in the top-right corner
+   - Adjust theme (Light/Dark/Auto)
+   - Set font size and zoom level
+   - Configure notification settings
+
+## Configuration
+
+### MCP (Model Context Protocol) Setup
+
+If you're using MCP servers with Claude Desktop:
+
+1. **Locate Configuration File**
+   - Windows: `%APPDATA%\Claude\config.json`
+   - macOS: `~/Library/Application Support/Claude/config.json`
+   - Linux: `~/.config/Claude/config.json`
+
+2. **Edit Configuration**
+   - Open the config file in a text editor
+   - Add your MCP server configurations
+   - Restart Claude Desktop to apply changes
+
+### Example MCP Configuration
+
+```json
+{
+  "mcpServers": {
+    "your-server-name": {
+      "command": "python",
+      "args": ["/path/to/your/server.py"],
+      "disabled": false
+    }
+  }
+}
 ```
-c:\Users\szabo\AppData\Roaming\Claude\claude_desktop_config.json
-```
 
-## 🔧 How It Works
+## Troubleshooting
 
-- **`stdio_server.py`** - Stdio wrapper for Claude Desktop communication
-  - Reads JSON-RPC from stdin (Claude Desktop)
-  - Executes MCP protocol methods directly
-  - Writes responses to stdout
-  
-- **`app.py`** - HTTP server for Vercel/ChatGPT
-  - REST API endpoints
-  - Flask-based for Vercel deployment
-  - Both use the same core MCP logic
+### Claude Won't Launch
 
-## 🚀 Usage
+#### Solution 1: Restart Your Computer
 
-1. **Restart Claude Desktop** to load the new configuration
+1. Close any Claude windows
+2. Restart your computer
+3. Launch Claude again
 
-2. **Available in Claude Desktop as:** `donutsmp` MCP server
+#### Solution 2: Reinstall Claude
 
-3. **7 Tools Available:**
-   - `auction_list` - Get Auction House entries
-   - `auction_transactions` - Get transaction history
-   - `leaderboards` - Get leaderboards (money, kills, playtime, etc.)
-   - `lookup_player` - Find player info
-   - `player_stats` - Get player statistics
-   - `shield_metrics` - Get Shield service metrics  
-   - `shield_stats` - Get Shield service stats
+- Uninstall Claude completely
+- Restart your computer
+- Download and reinstall the latest version
 
-## 🧪 Testing
+#### Solution 3: Clear Cache
 
-Verified stdio communication:
-```powershell
-# Test initialize
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}' | python stdio_server.py
-# ✓ Returns: protocol version, capabilities, serverInfo
+- Windows: Delete `%LOCALAPPDATA%\Claude` folder
+- macOS: Delete `~/Library/Caches/Claude` folder
+- Linux: Delete `~/.cache/Claude` folder
+- Restart Claude
 
-# Test tools/list
-echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | python stdio_server.py
-# ✓ Returns: 7 tools with descriptions and JSON schemas
-```
+### Login Issues
 
-## 🔑 API Key (Optional)
+- Ensure you have an active internet connection
+- Try clearing your browser cookies if sign-in fails
+- If you forgot your password, use "Forgot Password" on the sign-in screen
+- Contact Anthropic support if issues persist
 
-The server works without an API key, but if you have a DonutSMP API key:
+### Performance Issues
 
-1. Open: `c:\Users\szabo\AppData\Roaming\Claude\claude_desktop_config.json`
-2. Update the `DONUTSMP_API_KEY` value:
-   ```json
-   "env": {
-     "DONUTSMP_API_KEY": "your-key-here"
-   }
-   ```
-3. Restart Claude Desktop
+- Close unnecessary applications running in background
+- Ensure your system meets minimum requirements
+- Check available disk space (needs at least 500 MB free)
+- Try disabling hardware acceleration in settings
 
-## 🐛 Debugging
+### MCP Server Connection Issues
 
-Check Claude Desktop logs for MCP server output:
-- Startup message: "DonutSMP MCP stdio server starting"
-- Request logs: "[STDIO] Request: {method} (id={id})"
-- Any errors will appear in Claude Desktop's MCP server logs
+- Verify the MCP server is running and accessible
+- Check the configuration file syntax (must be valid JSON)
+- Review server logs for error messages
+- Ensure file paths in config are absolute paths
 
-## 📊 Architecture
+## Getting Help
 
-```
-Claude Desktop (stdio) ──→ stdio_server.py ──→ app.py (core logic) ──→ DonutSMP API
-                                                                          (api.donutsmp.net)
+- Visit the [Anthropic Help Center](https://support.anthropic.com)
+- Check [Claude Documentation](https://docs.anthropic.com)
+- Contact support through the Claude Desktop help menu
 
-ChatGPT (HTTP) ────────→ app.py (Flask/Vercel) ──→ app.py (core logic) ──→ DonutSMP API
-```
+## Additional Resources
 
-Both interfaces use the same MCP protocol implementation (`handle_mcp_message` in app.py).
-
----
-
-**Next:** Restart Claude Desktop and try asking: *"List the top players on the DonutSMP money leaderboard"*
+- [MCP Documentation](https://modelcontextprotocol.io)
+- [Claude API Documentation](https://docs.anthropic.com/claude/reference)
+- [Community Forum](https://discuss.anthropic.com)

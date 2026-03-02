@@ -58,28 +58,27 @@ def make_request(endpoint: str, method: str = "GET", data: dict | None = None) -
 
 @app.before_request
 def log_requests_and_handle_options():
-    """Log all requests for debugging ChatGPT connector creation issues.
-    
-    ChatGPT sends discovery probes to various endpoints (/, /mcp, /tools, /.well-known/mcp.json)
-    and this logging helps diagnose silent failures during connector setup.
+    """Verbose request logging for connector discovery/debugging.
+
+    This intentionally logs request method/path/remote address and all headers
+    so Vercel logs show exactly what ChatGPT probes during "Create".
     """
-    body_preview = ""
+    print(
+        f"[{datetime.datetime.now().isoformat()}] "
+        f"{request.method} {request.path} from {request.remote_addr} "
+        f"headers: {dict(request.headers)}"
+    )
+
     if request.method in {"POST", "PUT", "PATCH"}:
         raw = request.get_data(cache=True, as_text=True) or ""
-        body_preview = raw[:500]
-    
-    # Log critical headers for debugging (User-Agent, Origin, Content-Type)
-    ua = request.headers.get('User-Agent', 'n/a')[:80]
-    origin = request.headers.get('Origin', 'n/a')
-    ct = request.headers.get('Content-Type', 'n/a')
-    print(f"[REQ] {request.method} {request.path} query={request.query_string.decode()}")
-    print(f"      UA={ua} Origin={origin} CT={ct}")
-    if body_preview:
-        print(f"      body={body_preview}")
+        if raw:
+            print(f"[{datetime.datetime.now().isoformat()}] body: {raw[:1000]}")
 
-    # Handle CORS preflight requests (ChatGPT browser-based discovery)
+    # Ensure preflight requests always return 204 for connector compatibility,
+    # even when Flask auto-generates OPTIONS for specific routes.
     if request.method == "OPTIONS":
         return ("", 204)
+
     return None
 
 
@@ -91,11 +90,18 @@ def add_cors_headers(response):
     Without these headers, browser preflight (OPTIONS) requests will fail silently.
     """
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS, HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Expose-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With"
     response.headers["Access-Control-Max-Age"] = "86400"  # Cache preflight for 24h
     return response
+
+
+# Explicit OPTIONS handlers are required for some browser-based MCP clients.
+# This ensures every preflight request receives a clean 204 response.
+@app.route("/", methods=["OPTIONS"])
+@app.route("/<path:path>", methods=["OPTIONS"])
+def options_handler(path: str = ""):
+    return ("", 204)
 
 
 # ── Tool definitions ───────────────────────────────────────────────────────────
@@ -394,7 +400,16 @@ def mcp_root_base():
     """
     if request.method == "POST":
         return handle_mcp_request()
-    return jsonify(get_server_metadata(""))
+
+    payload = get_server_metadata("")
+    payload.update(
+        {
+            "message": "DonutSMP MCP Server - use /mcp for discovery or /tools for direct tool list",
+            "discovery_url": "/mcp",
+            "tools_url": "/tools",
+        }
+    )
+    return jsonify(payload)
 
 
 @app.route("/mcp", methods=["GET", "POST"])
@@ -533,7 +548,7 @@ def http_github_page():
 @bridge.get("/favicon.ico")
 @bridge.get("/favicon.png")
 def http_favicon():
-    icon_path = os.path.join(os.path.dirname(__file__), "favicon.png")
+    icon_path = os.path.join(os.path.dirname(__file__), "/static/favicon.png")
     if os.path.exists(icon_path):
         return send_file(icon_path)
     return ("", 204)
